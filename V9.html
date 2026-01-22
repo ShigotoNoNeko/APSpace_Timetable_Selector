@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timetable Viewer v10</title>
+
+<style>
+:root{
+  --primary:#007aff;
+  --bg:#f2f2f7;
+  --card:#ffffff;
+  --text:#1c1c1e;
+  --muted:#8e8e93;
+  --selected:#e8f0ff;
+  --now:#ff3b30;
+}
+
+*{ box-sizing:border-box }
+
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui;
+  background:var(--bg);
+  color:var(--text);
+  padding-bottom:80px;
+}
+
+/* ===== NAV BAR ===== */
+.nav{
+  position:sticky;
+  top:0;
+  background:var(--primary);
+  color:white;
+  padding:14px 16px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  z-index:100;
+}
+
+.back-btn{
+  font-size:16px;
+  cursor:pointer;
+  display:none;
+}
+
+.title{
+  flex:1;
+  text-align:center;
+  font-size:18px;
+  font-weight:600;
+  margin-right:24px;
+}
+
+/* ===== PAGE ===== */
+.page{ display:none; padding:16px }
+.page.active{ display:block }
+
+/* ===== MENU ===== */
+.menu-btn{
+  background:var(--card);
+  border-radius:16px;
+  padding:18px;
+  margin-bottom:12px;
+  font-size:18px;
+  font-weight:600;
+  box-shadow:0 6px 16px rgba(0,0,0,.08);
+  cursor:pointer;
+}
+
+/* ===== ROOM CARD ===== */
+.room{
+  background:var(--card);
+  border-radius:18px;
+  padding:14px;
+  margin-bottom:12px;
+  box-shadow:0 6px 16px rgba(0,0,0,.08);
+  cursor:pointer;
+  border:2px solid transparent;
+  transition:.15s;
+}
+
+.room.selected{
+  background:var(--selected);
+  border-color:var(--primary);
+}
+
+.room.now{
+  border-color:var(--now);
+  background:#ffecec;
+}
+
+.room h3{
+  margin:0 0 12px;
+  font-size:16px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.now-badge{
+  background:var(--now);
+  color:white;
+  font-size:12px;
+  padding:2px 8px;
+  border-radius:999px;
+}
+
+/* ===== TIME GRID ===== */
+.time-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap:8px;
+}
+
+.time{
+  background:#e5e5ea;
+  padding:6px 8px;
+  border-radius:999px;
+  font-size:14px;
+  text-align:center;
+}
+
+/* ===== BOTTOM BAR (1 ROW ONLY) ===== */
+.bottom-bar{
+  position:fixed;
+  bottom:0;
+  left:0;
+  right:0;
+  background:rgba(255,255,255,.95);
+  border-top:1px solid #d1d1d6;
+  padding:8px 12px;
+
+  display:none;
+  align-items:center;
+  gap:8px;
+
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  overflow-y:hidden;
+  white-space:nowrap;
+  max-height:64px;
+}
+
+.bottom-bar::-webkit-scrollbar{ display:none }
+
+.bottom-pill{
+  flex:0 0 auto;
+  background:var(--primary);
+  color:white;
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:14px;
+}
+
+/* ===== POPUP ===== */
+.popup{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.4);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+}
+
+.popup-card{
+  background:white;
+  padding:20px;
+  border-radius:16px;
+  max-width:300px;
+  text-align:center;
+}
+
+.popup-btn{
+  margin-top:16px;
+  padding:8px 16px;
+  border:none;
+  border-radius:999px;
+  background:#007aff;
+  color:white;
+}
+</style>
+</head>
+
+<body>
+
+<header class="nav">
+  <div id="backBtn" class="back-btn" onclick="showMenu()">← Back</div>
+  <div id="headerTitle" class="title">Select Class Group</div>
+</header>
+
+<div id="pageMenu" class="page active"></div>
+<div id="pageDetail" class="page"></div>
+<div id="bottomBar" class="bottom-bar"></div>
+
+<div id="errorPopup" class="popup">
+  <div class="popup-card">
+    <p>
+      Unable to get data.<br>
+      Please use APSpace.
+    </p>
+    <button class="popup-btn" onclick="closePopup()">OK</button>
+  </div>
+</div>
+
+<script>
+const ENDPOINT =
+  "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable";
+
+const pageMenu = document.getElementById("pageMenu");
+const pageDetail = document.getElementById("pageDetail");
+const headerTitle = document.getElementById("headerTitle");
+const backBtn = document.getElementById("backBtn");
+const bottomBar = document.getElementById("bottomBar");
+
+const selectedRooms = new Set();
+let groupedData = {};
+
+/* ===== HELPERS ===== */
+function toMinutes(t){
+  const [h,m] = t.split(":").map(Number);
+  return h*60 + m;
+}
+
+function isNow(from,to){
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+  return nowMin >= toMinutes(from) && nowMin < toMinutes(to);
+}
+
+function todayDatestamp(){
+  const d = new Date();
+  const day = String(d.getDate()).padStart(2,'0');
+  const m = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+  return `${day}-${m[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
+}
+
+/* ===== POPUP ===== */
+function showPopup(){
+  document.getElementById("errorPopup").style.display = "flex";
+}
+function closePopup(){
+  document.getElementById("errorPopup").style.display = "none";
+}
+
+/* ===== LOAD ===== */
+async function load(){
+  const res = await fetch(ENDPOINT,{cache:'no-store'});
+  const data = await res.json();
+
+  const today = todayDatestamp();
+  const rows = data
+    .filter(r => r.DATESTAMP === today)
+    .filter(r => /^[A-Z]-/.test(r.ROOM || ""));
+
+  if(rows.length === 0){
+    showPopup();
+    return;
+  }
+
+  groupedData = {};
+  rows.forEach(r=>{
+    const g = r.ROOM.charAt(0);
+    groupedData[g] ||= {};
+    groupedData[g][r.ROOM] ||= [];
+    groupedData[g][r.ROOM].push(r);
+  });
+
+  showMenu();
+}
+
+/* ===== MENU ===== */
+function showMenu(){
+  headerTitle.textContent = "Select Class Group";
+  backBtn.style.display = "none";
+  pageMenu.classList.add("active");
+  pageDetail.classList.remove("active");
+  pageMenu.innerHTML = "";
+
+  Object.keys(groupedData).sort().forEach(g=>{
+    const btn = document.createElement("div");
+    btn.className = "menu-btn";
+    btn.textContent = g;
+    btn.onclick = ()=>showDetail(g);
+    pageMenu.appendChild(btn);
+  });
+}
+
+/* ===== DETAIL ===== */
+function showDetail(letter){
+  headerTitle.textContent = `Group ${letter}`;
+  backBtn.style.display = "block";
+  pageMenu.classList.remove("active");
+  pageDetail.classList.add("active");
+
+  let html = "";
+  Object.keys(groupedData[letter]).sort().forEach(room=>{
+    let hasNow = false;
+    const seen = new Set();
+    const times = [];
+
+    groupedData[letter][room].forEach(r=>{
+      const k = r.TIME_FROM + r.TIME_TO;
+      if(seen.has(k)) return;
+      seen.add(k);
+      times.push(r);
+      if(isNow(r.TIME_FROM,r.TIME_TO)) hasNow = true;
+    });
+
+    html += `
+      <div class="room ${selectedRooms.has(room)?'selected':''} ${hasNow?'now':''}"
+           onclick="toggleSelect('${room}')">
+        <h3>
+          ${room}
+          ${hasNow?'<span class="now-badge">NOW</span>':''}
+        </h3>
+        <div class="time-grid">
+          ${times.map(r=>`
+            <div class="time">${r.TIME_FROM}–${r.TIME_TO}</div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  });
+
+  pageDetail.innerHTML = html;
+}
+
+/* ===== SELECT ===== */
+function toggleSelect(room){
+  selectedRooms.has(room)
+    ? selectedRooms.delete(room)
+    : selectedRooms.add(room);
+
+  renderBottomBar();
+  showDetail(headerTitle.textContent.split(" ").pop());
+}
+
+function renderBottomBar(){
+  bottomBar.innerHTML = "";
+  if(selectedRooms.size === 0){
+    bottomBar.style.display = "none";
+    return;
+  }
+  bottomBar.style.display = "flex";
+  selectedRooms.forEach(r=>{
+    const pill = document.createElement("div");
+    pill.className = "bottom-pill";
+    pill.textContent = r;
+    bottomBar.appendChild(pill);
+  });
+}
+
+load();
+</script>
+
+</body>
+</html>
