@@ -1,3 +1,10 @@
+### Recent Updates
+
+- Rooms are now grouped by floor within each class group for improved readability.
+- Ongoing classes are highlighted with a red border.
+- Classes starting within the next 30 minutes are highlighted with a yellow border.
+
+
 # APSpace Timetable Selector (Unofficial)
 
 An unofficial web-based timetable viewer and class selector built for educational and personal use.
