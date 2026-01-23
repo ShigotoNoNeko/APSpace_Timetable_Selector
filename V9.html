@@ -12,45 +12,40 @@
   --card:#ffffff;
   --text:#1c1c1e;
   --muted:#8e8e93;
+
   --selected:#e8f0ff;
   --now:#ff3b30;
+  --soon:#ffcc00;
 }
 
 *{ box-sizing:border-box }
 
 body{
   margin:0;
-  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui;
+  font-family:-apple-system,BlinkMacSystemFont,system-ui;
   background:var(--bg);
   color:var(--text);
   padding-bottom:80px;
 }
 
-/* ===== NAV BAR ===== */
+/* ===== NAV ===== */
 .nav{
   position:sticky;
   top:0;
   background:var(--primary);
-  color:white;
+  color:#fff;
   padding:14px 16px;
   display:flex;
   align-items:center;
-  gap:12px;
-  z-index:100;
 }
 
-.back-btn{
-  font-size:16px;
-  cursor:pointer;
-  display:none;
-}
+.back-btn{ display:none; cursor:pointer }
 
 .title{
   flex:1;
   text-align:center;
   font-size:18px;
   font-weight:600;
-  margin-right:24px;
 }
 
 /* ===== PAGE ===== */
@@ -59,9 +54,9 @@ body{
 
 /* ===== MENU ===== */
 .menu-btn{
-  background:var(--card);
-  border-radius:16px;
+  background:#fff;
   padding:18px;
+  border-radius:16px;
   margin-bottom:12px;
   font-size:18px;
   font-weight:600;
@@ -69,117 +64,91 @@ body{
   cursor:pointer;
 }
 
-/* ===== ROOM CARD ===== */
-.room{
-  background:var(--card);
-  border-radius:18px;
-  padding:14px;
-  margin-bottom:12px;
-  box-shadow:0 6px 16px rgba(0,0,0,.08);
+/* ===== FLOOR ===== */
+.floor-row{
+  background:#fff;
+  padding:14px 16px;
+  border-radius:14px;
+  margin-bottom:8px;
+  display:flex;
+  justify-content:space-between;
+  font-weight:600;
   cursor:pointer;
-  border:2px solid transparent;
-  transition:.15s;
+  box-shadow:0 4px 12px rgba(0,0,0,.06);
 }
 
+.floor-row span{ color:var(--muted) }
+
+/* ===== COLLAPSE ===== */
+.floor-rooms{
+  max-height:0;
+  overflow:hidden;
+  transition:max-height .25s ease;
+}
+.floor-rooms.active{ max-height:3000px }
+
+/* ===== ROOM ===== */
+.room{
+  background:#fff;
+  border-radius:18px;
+  padding:14px;
+  margin:10px 0;
+  border:2px solid transparent;
+  box-shadow:0 6px 16px rgba(0,0,0,.08);
+  cursor:pointer;
+}
+
+/* STATES */
 .room.selected{
   background:var(--selected);
   border-color:var(--primary);
 }
-
 .room.now{
   border-color:var(--now);
-  background:#ffecec;
+}
+.room.soon{
+  border-color:var(--soon);
 }
 
 .room h3{
   margin:0 0 12px;
   font-size:16px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-}
-
-.now-badge{
-  background:var(--now);
-  color:white;
-  font-size:12px;
-  padding:2px 8px;
-  border-radius:999px;
 }
 
 /* ===== TIME GRID ===== */
 .time-grid{
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  grid-template-columns:repeat(auto-fit,minmax(90px,1fr));
   gap:8px;
 }
-
 .time{
   background:#e5e5ea;
-  padding:6px 8px;
+  padding:6px;
   border-radius:999px;
   font-size:14px;
   text-align:center;
 }
 
-/* ===== BOTTOM BAR (1 ROW ONLY) ===== */
+/* ===== BOTTOM BAR ===== */
 .bottom-bar{
   position:fixed;
   bottom:0;
   left:0;
   right:0;
-  background:rgba(255,255,255,.95);
+  background:#fff;
   border-top:1px solid #d1d1d6;
-  padding:8px 12px;
-
+  padding:8px;
   display:none;
-  align-items:center;
   gap:8px;
-
-  flex-wrap:nowrap;
   overflow-x:auto;
-  overflow-y:hidden;
   white-space:nowrap;
-  max-height:64px;
 }
-
-.bottom-bar::-webkit-scrollbar{ display:none }
-
 .bottom-pill{
   flex:0 0 auto;
   background:var(--primary);
-  color:white;
+  color:#fff;
   padding:6px 12px;
   border-radius:999px;
-  font-size:14px;
-}
-
-/* ===== POPUP ===== */
-.popup{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.4);
-  display:none;
-  align-items:center;
-  justify-content:center;
-  z-index:9999;
-}
-
-.popup-card{
-  background:white;
-  padding:20px;
-  border-radius:16px;
-  max-width:300px;
-  text-align:center;
-}
-
-.popup-btn{
-  margin-top:16px;
-  padding:8px 16px;
-  border:none;
-  border-radius:999px;
-  background:#007aff;
-  color:white;
 }
 </style>
 </head>
@@ -195,16 +164,6 @@ body{
 <div id="pageDetail" class="page"></div>
 <div id="bottomBar" class="bottom-bar"></div>
 
-<div id="errorPopup" class="popup">
-  <div class="popup-card">
-    <p>
-      Unable to get data.<br>
-      Please use APSpace.
-    </p>
-    <button class="popup-btn" onclick="closePopup()">OK</button>
-  </div>
-</div>
-
 <script>
 const ENDPOINT =
   "https://s3-ap-southeast-1.amazonaws.com/open-ws/weektimetable";
@@ -217,139 +176,146 @@ const bottomBar = document.getElementById("bottomBar");
 
 const selectedRooms = new Set();
 let groupedData = {};
+let activeFloor = null;
 
-/* ===== HELPERS ===== */
-function toMinutes(t){
-  const [h,m] = t.split(":").map(Number);
+/* ===== TIME (12-HOUR ONLY) ===== */
+function toMinutes12(timeStr){
+  // e.g. "2:30 PM"
+  const [time, meridian] = timeStr.trim().split(" ");
+  let [h, m] = time.split(":").map(Number);
+
+  if(meridian === "PM" && h !== 12) h += 12;
+  if(meridian === "AM" && h === 12) h = 0;
+
   return h*60 + m;
 }
 
+function nowMinutes(){
+  const d = new Date();
+  return d.getHours()*60 + d.getMinutes();
+}
+
 function isNow(from,to){
-  const now = new Date();
-  const nowMin = now.getHours()*60 + now.getMinutes();
-  return nowMin >= toMinutes(from) && nowMin < toMinutes(to);
+  const now = nowMinutes();
+  return now >= toMinutes12(from) && now < toMinutes12(to);
+}
+
+function hasSoon(slots){
+  const now = nowMinutes();
+  return slots.some(s=>{
+    const diff = toMinutes12(s.TIME_FROM) - now;
+    return diff > 0 && diff <= 30;
+  });
 }
 
 function todayDatestamp(){
   const d = new Date();
-  const day = String(d.getDate()).padStart(2,'0');
   const m = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-  return `${day}-${m[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
-}
-
-/* ===== POPUP ===== */
-function showPopup(){
-  document.getElementById("errorPopup").style.display = "flex";
-}
-function closePopup(){
-  document.getElementById("errorPopup").style.display = "none";
+  return `${String(d.getDate()).padStart(2,'0')}-${m[d.getMonth()]}-${String(d.getFullYear()).slice(-2)}`;
 }
 
 /* ===== LOAD ===== */
 async function load(){
-  const res = await fetch(ENDPOINT,{cache:'no-store'});
-  const data = await res.json();
-
-  const today = todayDatestamp();
-  const rows = data
-    .filter(r => r.DATESTAMP === today)
-    .filter(r => /^[A-Z]-/.test(r.ROOM || ""));
-
-  if(rows.length === 0){
-    showPopup();
-    return;
-  }
-
+  const data = await (await fetch(ENDPOINT,{cache:"no-store"})).json();
   groupedData = {};
-  rows.forEach(r=>{
-    const g = r.ROOM.charAt(0);
-    groupedData[g] ||= {};
-    groupedData[g][r.ROOM] ||= [];
-    groupedData[g][r.ROOM].push(r);
-  });
+
+  data
+    .filter(r=>r.DATESTAMP===todayDatestamp())
+    .forEach(r=>{
+      if(!/^[A-Z]-/.test(r.ROOM||"")) return;
+      const g = r.ROOM.split("-")[0];
+      groupedData[g] ??= {};
+      groupedData[g][r.ROOM] ??= [];
+      groupedData[g][r.ROOM].push(r);
+    });
 
   showMenu();
 }
 
 /* ===== MENU ===== */
 function showMenu(){
-  headerTitle.textContent = "Select Class Group";
-  backBtn.style.display = "none";
+  headerTitle.textContent="Select Class Group";
+  backBtn.style.display="none";
+  pageMenu.innerHTML="";
   pageMenu.classList.add("active");
   pageDetail.classList.remove("active");
-  pageMenu.innerHTML = "";
 
   Object.keys(groupedData).sort().forEach(g=>{
-    const btn = document.createElement("div");
-    btn.className = "menu-btn";
-    btn.textContent = g;
-    btn.onclick = ()=>showDetail(g);
+    const btn=document.createElement("div");
+    btn.className="menu-btn";
+    btn.textContent=g;
+    btn.onclick=()=>showDetail(g);
     pageMenu.appendChild(btn);
   });
 }
 
 /* ===== DETAIL ===== */
-function showDetail(letter){
-  headerTitle.textContent = `Group ${letter}`;
-  backBtn.style.display = "block";
+function showDetail(group){
+  headerTitle.textContent=`Group ${group}`;
+  backBtn.style.display="block";
   pageMenu.classList.remove("active");
   pageDetail.classList.add("active");
 
-  let html = "";
-  Object.keys(groupedData[letter]).sort().forEach(room=>{
-    let hasNow = false;
-    const seen = new Set();
-    const times = [];
-
-    groupedData[letter][room].forEach(r=>{
-      const k = r.TIME_FROM + r.TIME_TO;
-      if(seen.has(k)) return;
-      seen.add(k);
-      times.push(r);
-      if(isNow(r.TIME_FROM,r.TIME_TO)) hasNow = true;
-    });
-
-    html += `
-      <div class="room ${selectedRooms.has(room)?'selected':''} ${hasNow?'now':''}"
-           onclick="toggleSelect('${room}')">
-        <h3>
-          ${room}
-          ${hasNow?'<span class="now-badge">NOW</span>':''}
-        </h3>
-        <div class="time-grid">
-          ${times.map(r=>`
-            <div class="time">${r.TIME_FROM}–${r.TIME_TO}</div>
-          `).join("")}
-        </div>
-      </div>
-    `;
+  const floors={};
+  Object.keys(groupedData[group]).forEach(room=>{
+    const f=room.split("-")[1];
+    floors[f] ??= [];
+    floors[f].push(room);
   });
 
-  pageDetail.innerHTML = html;
+  pageDetail.innerHTML = Object.keys(floors).sort().map(floor=>{
+    const open = activeFloor===floor;
+
+    return `
+      <div class="floor-row" onclick="toggleFloor('${floor}','${group}')">
+        Floor ${floor}
+        <span>${open?"▾":"▸"}</span>
+      </div>
+      <div class="floor-rooms ${open?"active":""}">
+        ${open?floors[floor].map(room=>{
+          const slots = groupedData[group][room];
+          const cls = [
+            selectedRooms.has(room) ? "selected" : "",
+            slots.some(s=>isNow(s.TIME_FROM,s.TIME_TO)) ? "now" :
+            hasSoon(slots) ? "soon" : ""
+          ].join(" ");
+
+          return `
+            <div class="room ${cls}" onclick="toggleSelect('${room}',event)">
+              <h3>${room}</h3>
+              <div class="time-grid">
+                ${slots.map(s=>`<div class="time">${s.TIME_FROM}–${s.TIME_TO}</div>`).join("")}
+              </div>
+            </div>`;
+        }).join(""):""}
+      </div>`;
+  }).join("");
 }
 
-/* ===== SELECT ===== */
-function toggleSelect(room){
-  selectedRooms.has(room)
-    ? selectedRooms.delete(room)
-    : selectedRooms.add(room);
+function toggleFloor(floor,group){
+  activeFloor = activeFloor===floor ? null : floor;
+  showDetail(group);
+}
 
-  renderBottomBar();
+function toggleSelect(room,e){
+  e.stopPropagation();
+  selectedRooms.has(room)?selectedRooms.delete(room):selectedRooms.add(room);
+  renderBottom();
   showDetail(headerTitle.textContent.split(" ").pop());
 }
 
-function renderBottomBar(){
-  bottomBar.innerHTML = "";
-  if(selectedRooms.size === 0){
-    bottomBar.style.display = "none";
+function renderBottom(){
+  bottomBar.innerHTML="";
+  if(!selectedRooms.size){
+    bottomBar.style.display="none";
     return;
   }
-  bottomBar.style.display = "flex";
+  bottomBar.style.display="flex";
   selectedRooms.forEach(r=>{
-    const pill = document.createElement("div");
-    pill.className = "bottom-pill";
-    pill.textContent = r;
-    bottomBar.appendChild(pill);
+    const p=document.createElement("div");
+    p.className="bottom-pill";
+    p.textContent=r;
+    bottomBar.appendChild(p);
   });
 }
 
